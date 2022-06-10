@@ -48,17 +48,20 @@ unsigned long bot_lasttime;
 
 long duration; // variable for the duration of sound wave travel
 int distance; // variable for the distance measurement
+int warning1 = 0;
 
 int ledStatus = 0;
 
 NTPtime NTPch("pool.ntp.org");   // Choose server pool as required
 
 strDateTime dateTime;
-strDateTime HWtime;
 String aikaleima;
 
 String BOT_TOKEN ="";
-String MAIN_CHAT_ID= "";
+String MAIN_CHAT_ID = "";
+
+String ssid  = "";
+String password = "";
 
 
 X509List cert(TELEGRAM_CERTIFICATE_ROOT);
@@ -111,16 +114,24 @@ int get_distance() {
   return calculated_distance;
 }
 
-String checkTime()
-{    
-  dateTime = NTPch.getNTPtime(2.0, 1);
-  if(dateTime.valid){
-		aikaleima = String(dateTime.day) + "." + String(dateTime.month) + "."  + "." + String(dateTime.year) +  " / "+
+String checkTime(){
+  int x = 0;
+  strDateTime tempDateTime;
+
+  while (!tempDateTime.valid && x < 50){
+    tempDateTime = NTPch.getNTPtime(2.0, 1);
+    delay(500);
+		++x;
+  }
+  if (tempDateTime.valid){
+    dateTime = tempDateTime;
+    aikaleima = aikaleima = String(dateTime.day) + "." + String(dateTime.month) + "." + String(dateTime.year) +  " / "+
                 String(dateTime.hour) + ":" + String(dateTime.minute) + ":" + String(dateTime.second);
   }
   else
   {
     aikaleima = "aikaleimaa ei saatu";
+    Serial.println("aikaleimaa ei saatu");
   }
   
    return aikaleima;
@@ -128,83 +139,16 @@ String checkTime()
 
 String cesspoolStatus(){
 
-  distance = get_distance();
-  aikaleima = checkTime();
-  String status = "Yhteys laitteeseen saatu: " + aikaleima + ".\n";
+  int tempDist = get_distance();
+  String currTime = checkTime();
+  String status = "Yhteys laitteeseen saatu: " + currTime + ".\n";
   status += "\n";
-  status += "Kaivon syvyys: " + String(distance) + "\n";
+  status += "Kaivon syvyys: " + String(tempDist) + "\n";
   status += "Yhdistetty nettiin\n";
   status += "Vielä kai jotain\n";
 
   return status;
 }
-
-void setup()
-{
-  pinMode(led, OUTPUT);
-  Serial.begin(115200);
-  while (!Serial)
-        continue;
-    delay(500);
- 
-    // Initialize SD library
-    while (!SD.begin(chipSelect)) {
-        Serial.println(F("Failed to initialize SD library"));
-        delay(1000);
-    }
-  Serial.println("");
-
-  //haetaan data jsonista
-  configJson = getJSonFromFile(&config_doc, user_conf_file);
-  if (!configJson.isNull()){
-    configJson = getJSonFromFile(&config_doc, conf_file);
-    Serial.println("Using default conf file.");
-  }
-
-  Serial.println("this is a test: " + String(configJson["ssid"]));
-  
-  Serial.println("##  Connecting to Internet  ##");
-  WiFi.mode(WIFI_STA);
-  String ssid = configJson["ssid"];
-  String password = configJson["password"];
-  BOT_TOKEN = String(configJson["bot_token"]);
-  MAIN_CHAT_ID = String(configJson["main_chat_id"]);
-
-  bot.updateToken(BOT_TOKEN);
-
-  WiFi.begin(ssid, password);
-  // Telegram stuff
-  secured_client.setTrustAnchors(&cert); // Add root certificate for api.telegram.org
-
-
-  pinMode(trigPin, OUTPUT); // Sets the trigPin as an OUTPUT
-  pinMode(echoPin, INPUT); // Sets the echoPin as an INPUT
-   // // Serial Communication is starting with 9600 of baudrate speed
-
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    Serial.print(".");
-    delay(500);
-  }
-  Serial.print("\nWiFi connected. IP address: ");
-  Serial.println(WiFi.localIP());
-
-  Serial.print("Retrieving time: ");
-  configTime(2, 1, "pool.ntp.org"); // get UTC time via NTP
-  time_t now = time(nullptr);
-  while (now < 24 * 3600)
-  {
-    Serial.print(".");
-    delay(100);
-    now = time(nullptr);
-  }
-  Serial.println(now);
-
-  bot.sendMessage(MAIN_CHAT_ID, "Bot started up", "");
-    
-}
-
-
 
 void handleNewMessages(int numNewMessages)
 {
@@ -238,7 +182,7 @@ void handleNewMessages(int numNewMessages)
     }
 
     if (text == "/status")
-    {
+    { 
       bot.sendMessage(chat_id, cesspoolStatus(), ""); 
     }
 
@@ -254,20 +198,65 @@ void handleNewMessages(int numNewMessages)
   }
 }
 
+void timedMeasure(String every, int interval){
 
 
+  //todo
+  
+}
+
+void setup()
+{
+  pinMode(led, OUTPUT);
+  
+  Serial.begin(115200);
+  while (!Serial)
+        continue;
+    delay(500);
+ 
+    // Initialize SD library
+    while (!SD.begin(chipSelect)) {
+        Serial.println(F("Failed to initialize SD library"));
+        delay(1000);
+    }
+  Serial.println("");
+
+  //haetaan data jsonista
+  configJson = getJSonFromFile(&config_doc, user_conf_file);
+  if (!configJson.isNull()){
+    configJson = getJSonFromFile(&config_doc, conf_file);
+    Serial.println("Using default conf file.");
+  }
+
+  configTime(2, 1, "pool.ntp.org");
+
+  Serial.println("##  Connecting to Internet  ##");
+  WiFi.mode(WIFI_STA);
+  ssid = String(configJson["ssid"]);
+  password = String(configJson["password"]);
+  BOT_TOKEN = String(configJson["bot_token"]);
+  MAIN_CHAT_ID = String(configJson["main_chat_id"]);
+
+  bot.updateToken(BOT_TOKEN);
+
+  WiFi.begin(ssid, password);
+  // Telegram stuff
+  secured_client.setTrustAnchors(&cert); // Add root certificate for api.telegram.org
+
+  pinMode(trigPin, OUTPUT); // Sets the trigPin as an OUTPUT
+  pinMode(echoPin, INPUT); // Sets the echoPin as an INPUT
 
 
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.print("\nWiFi connected. IP address: ");
+  Serial.println(WiFi.localIP());
 
-// void UpdateHWTime()
-// {    
-//     pinMode(Led, HIGH);
-//     HWtime = dateTime;
-//     Serial.println(HWtime);
-//     Serial.println("HW time");
-//     delay(3000);
-   
-// }
+  bot.sendMessage(MAIN_CHAT_ID, cesspoolStatus(), "");
+}
 
 void loop()
 {
@@ -291,9 +280,13 @@ if (millis() - bot_lasttime > BOT_MTBS)
   
 
   if (distance < configJson["warn_level"]){
-
+    
+    if( abs(warning1 -distance) >= 3 && distance > 2){
+     
+      bot.sendMessage(MAIN_CHAT_ID, "Pinnan etäisyys kannesta: " + String(distance) + "cm, on aika tilata tyhjennys", "");
+      warning1 = distance;
+    }
     digitalWrite(led, HIGH);
-    bot.sendMessage(MAIN_CHAT_ID, "Pinnan etäisyys kannesta: " + String(distance) + "cm, on aika tilata tyhjennys", "");
   }
 
   else
@@ -302,12 +295,5 @@ if (millis() - bot_lasttime > BOT_MTBS)
   }
 
   delay(1500);
-  
-
-  // dateTime = NTPch.getNTPtime(2.0, 1);
-  // if(dateTime.valid){
-  //   NTPch.printDateTime(dateTime);
-  // }
-
   
 }

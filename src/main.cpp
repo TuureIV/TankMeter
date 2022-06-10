@@ -1,20 +1,46 @@
+//If Something doesn't work anymore, check cert
+
+
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include "NTPtimeESP.h"
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 #include <ArduinoJson.h>
+#include <SD.h>
+#include <SPI.h>
 
 #define echoPin 4 // to pin Echo of HC-SR04
 #define trigPin 0 // to pin Trig of HC-SR04
-#define led 14
+#define led 2
 
 //Telegram Stuff
-#define BOT_TOKEN ""
-#define MAIN_CHAT_ID  ""
 
-const char * ssid = "";
-const char * password = "";
+
+// struct Config {
+//   String bot_token;
+//   String main_chat_id;
+//   String ssid;
+//   String password;
+//   int warn_level;
+//   int top_distance;
+//   int diameter;
+//   int status_every;
+//   String status_period;
+// };
+
+
+
+//SD card stuff
+const char *conf_file = "CessPoolConf.txt";
+const char *user_conf_file = "userConf.txt";
+const int chipSelect = 4;
+DynamicJsonDocument config_doc(512);
+
+JsonObject configJson;
+
+File configFileSDcard;
+
 
 const unsigned long BOT_MTBS = 1000;
 unsigned long bot_lasttime;
@@ -31,11 +57,43 @@ strDateTime dateTime;
 strDateTime HWtime;
 String aikaleima;
 
+String BOT_TOKEN ="";
+String MAIN_CHAT_ID= "";
+
 
 X509List cert(TELEGRAM_CERTIFICATE_ROOT);
 WiFiClientSecure secured_client;
 UniversalTelegramBot bot(BOT_TOKEN, secured_client);
 
+JsonObject getJSonFromFile(DynamicJsonDocument *doc, String filename, bool forceCleanONJsonError = true ) {
+  // open the file for reading:
+  configFileSDcard = SD.open(filename);
+  if (configFileSDcard) {
+
+    DeserializationError error = deserializeJson(*doc, configFileSDcard);
+    if (error) {
+      // if the file didn't open, print an error:
+      Serial.print(F("Error parsing JSON "));
+      Serial.println(error.c_str());
+
+      if (forceCleanONJsonError){
+          return doc->to<JsonObject>();
+      }
+    }
+ 
+    // close the file:
+    configFileSDcard.close();
+    return doc->as<JsonObject>();
+  }
+  else {
+        // if the file didn't open, print an error:
+        Serial.print(F("Error opening (or file not exists) "));
+        Serial.println(filename);
+ 
+        Serial.println(F("Empty json created"));
+        return doc->to<JsonObject>();
+  } 
+}
 
 int get_distance() {
   int calculated_distance = 0;
@@ -81,16 +139,39 @@ String cesspoolStatus(){
   return status;
 }
 
-
-
 void setup()
 {
   pinMode(led, OUTPUT);
   Serial.begin(115200);
-  delay(800);
+  while (!Serial)
+        continue;
+    delay(500);
+ 
+    // Initialize SD library
+    while (!SD.begin(chipSelect)) {
+        Serial.println(F("Failed to initialize SD library"));
+        delay(1000);
+    }
   Serial.println("");
+
+  //haetaan data jsonista
+  configJson = getJSonFromFile(&config_doc, user_conf_file);
+  if (!configJson.isNull()){
+    configJson = getJSonFromFile(&config_doc, conf_file);
+    Serial.println("Using default conf file.");
+  }
+
+  Serial.println("this is a test: " + String(configJson["ssid"]));
+  
   Serial.println("##  Connecting to Internet  ##");
   WiFi.mode(WIFI_STA);
+  String ssid = configJson["ssid"];
+  String password = configJson["password"];
+  BOT_TOKEN = String(configJson["bot_token"]);
+  MAIN_CHAT_ID = String(configJson["main_chat_id"]);
+
+  bot.updateToken(BOT_TOKEN);
+
   WiFi.begin(ssid, password);
   // Telegram stuff
   secured_client.setTrustAnchors(&cert); // Add root certificate for api.telegram.org
@@ -209,7 +290,7 @@ if (millis() - bot_lasttime > BOT_MTBS)
   Serial.println("Measured distance: " + String(distance) + "cm");
   
 
-  if (distance < 14){
+  if (distance < configJson["warn_level"]){
 
     digitalWrite(led, HIGH);
     bot.sendMessage(MAIN_CHAT_ID, "Pinnan etäisyys kannesta: " + String(distance) + "cm, on aika tilata tyhjennys", "");

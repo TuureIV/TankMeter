@@ -1,0 +1,12 @@
+{
+    "bot_token"         :"5222619903:AAFgbFrC5jjD8cxu9A-TFzQQQdanvwcDWcI",
+    "main_chat_id"      :"-751680164",
+    "ssid"              :"E.T. Call home",
+    "password"          :"15251525",
+    "warn_level"        : 10,
+    "top_distance"      : 10,
+    "diameter"          : 50,
+    "status_every"      : 5,
+    "status_period"     :"M"
+    
+}
